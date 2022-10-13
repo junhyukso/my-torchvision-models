@@ -204,7 +204,7 @@ _COMMON_META = {
 
 
 def mobilenet_v2_bngn(
-    *, weights: Optional[MobileNet_V2_Weights] = None, progress: bool = True, **kwargs: Any
+    *, weights = None, progress: bool = True, **kwargs: Any
 ) -> MobileNetV2_bngn:
     """MobileNetV2 architecture from the `MobileNetV2: Inverted Residuals and Linear
     Bottlenecks <https://arxiv.org/abs/1801.04381>`_ paper.
@@ -225,7 +225,7 @@ def mobilenet_v2_bngn(
     .. autoclass:: torchvision.models.MobileNet_V2_Weights
         :members:
     """
-    weights = MobileNet_V2_Weights.verify(weights)
+    #weights = MobileNet_V2_Weights.verify(weights)
 
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
@@ -242,8 +242,3 @@ def mobilenet_v2_bngn(
 from ._utils import _ModelURLs
 
 
-model_urls = _ModelURLs(
-    {
-        "mobilenet_v2": MobileNet_V2_Weights.IMAGENET1K_V1.url,
-    }
-)
