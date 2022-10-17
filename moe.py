@@ -18,8 +18,11 @@ class sparseMoE(nn.Module):
         for i in range(1,len(self.experts)): 
             for w_key in ws_selector :
                 #exec(f'self.experts[i]{w_key} = self.experts[0]{w_key}') #TODO access by getattr and []
-                self.experts[i].get_parameter(w_key) = self.experts[0].get_parameter(w_key) ##Why not??
+                #self.experts[i].get_parameter(w_key) = self.experts[0].get_parameter(w_key) ##Why not??
+                aaa = self.experts[i].get_parameter(w_key) 
+                bbb = self.experts[0].get_parameter(w_key) ##Why not??
                 import pdb; pdb.set_trace()
+                aaa = bbb
 
     def _prepare_weight(self):
         self.experts[0].load_parameter()
