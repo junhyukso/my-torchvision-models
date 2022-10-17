@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 
+import torch.nn.functional as F
+
 class sparseMoE(nn.Module):
     def __init__(self, expertModules, mode='ws'):
         super().__init__()
@@ -8,7 +10,7 @@ class sparseMoE(nn.Module):
         #self.gate       = Gate(n_channel,len(self.experts), gumbel_tau=gumbel_tau)
 
         self.mode       = mode # [ 'single', 'moe',  'weight_sharing']
-        self._register_load_state_dict_pre_hook(lambda m,k : m._prepare_weight())
+        self.register_load_state_dict_post_hook(lambda m,k : m._prepare_weight())
 
     def _share_weight(self):
         # Copying Direction : 0 -> 1,2,3, ..
@@ -17,23 +19,21 @@ class sparseMoE(nn.Module):
 
         for i in range(1,len(self.experts)): 
             for w_key in ws_selector :
-                #exec(f'self.experts[i]{w_key} = self.experts[0]{w_key}') #TODO access by getattr and []
-                #self.experts[i].get_parameter(w_key) = self.experts[0].get_parameter(w_key) ##Why not??
-                aaa = self.experts[i].get_parameter(w_key) 
-                bbb = self.experts[0].get_parameter(w_key) ##Why not??
-                import pdb; pdb.set_trace()
-                aaa = bbb
+                module_path, _, param_name = w_key.rpartition(".")
+                setattr(
+                    self.experts[i].get_submodule(module_path), 
+                    param_name, 
+                    getattr(self.experts[0].get_submodule(module_path), param_name)
+                    )
+
 
     def _prepare_weight(self):
-        self.experts[0].load_parameter()
-
         if self.mode == 'ws' :
             # Share Pointer
             self._share_weight()
 
         elif self.mode == 'moe':
             #Share hard copy of weight
-            #for i in range(1,len(self.experts)-1): #0bit
             for i in range(1,len(self.experts)): 
                 self.experts[i].load_state_dict(self.experts[0].state_dict())
 
@@ -48,9 +48,9 @@ class sparseMoE(nn.Module):
         mask = F.one_hot(torch.randn(x.shape[0],len(self.experts)).argmax(dim=1),num_classes=len(self.experts)).float() # Noise-Free
         mask = mask.to(x.device)
 
-        mask,soft = mask
-        self.mask = mask #For Bit loss Computing
-        self.soft = soft
+        #mask,soft = mask
+        #self.mask = mask #For Bit loss Computing
+        #self.soft = soft
 
         outs = [ expert(x) for expert in self.experts ]
         out = torch.zeros_like(outs[0])
@@ -62,7 +62,7 @@ class sparseMoE(nn.Module):
 class Expert(nn.Module):
     def __init__(self):
         super().__init__()
-        self._register_load_state_dict_pre_hook(lambda m,k : m.load_parameter())
+        self.register_load_state_dict_post_hook(lambda m,k : m.load_parameter())
 
     def _copy_weight(self,a,b):
         # Load A from B

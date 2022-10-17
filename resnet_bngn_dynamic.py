@@ -4,7 +4,7 @@ from typing import Type, Any, Callable, Union, List, Optional
 import torch
 import torch.nn as nn
 from torch import Tensor
-
+import torch.nn.functional as F
 from ..transforms._presets import ImageClassification
 from ..utils import _log_api_usage_once
 from ._api import WeightsEnum, Weights
@@ -123,8 +123,6 @@ class BasicBlock(nn.Module):
         self.experts = [BasicBlockExpert(self.conv1,self.bn1,self.conv2) for _ in range(3)]
         self.sMoE    = sparseMoE(self.experts)
 
-        ###For Dynamic
-
 
     def forward(self, x: Tensor) -> Tensor:
         identity = x
@@ -143,6 +141,43 @@ class BasicBlock(nn.Module):
         out += identity
         out = self.relu(out)
 
+        return out
+
+
+
+class BottleneckExpert(Expert):
+    def __init__(self, conv1, bn1, conv2, bn2, conv3):
+        super().__init__()
+        self.origins = [conv1, bn1, conv2, bn2, conv3]
+
+        self.conv1  =   copy.deepcopy(conv1)
+        self.bn1    =   copy.deepcopy(bn1)
+        self.conv2  =   copy.deepcopy(conv2)
+        self.bn2    =   copy.deepcopy(bn2)
+        self.conv3  =   copy.deepcopy(conv3)
+        self.relu   =   nn.ReLU(inplace=True)
+
+    def load_parameter(self):
+        self._copy_weight(self.conv1,self.origins[0])
+        self._copy_weight(self.bn1,self.origins[1])
+        self._copy_weight(self.conv2,self.origins[2])
+        self._copy_weight(self.bn2,self.origins[3])
+        self._copy_weight(self.conv3,self.origins[4])
+
+    def get_ws_selector(self):
+        #return ['conv1.weight','conv2.weight','conv3.weight']
+        return []
+
+    def forward(self, x) :
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
         return out
 
 
@@ -176,24 +211,30 @@ class Bottleneck(nn.Module):
         self.conv2 = conv3x3(width, width, stride, groups, dilation)
         self.bn2 = norm_layer(width)
         self.conv3 = conv1x1(width, planes * self.expansion)
-        self.bn3 = norm_layer(planes * self.expansion)
+        #self.bn3 = norm_layer(planes * self.expansion)
+        self.gn = nn.GroupNorm(4,planes * self.expansion)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
 
+        self.experts = [BottleneckExpert(self.conv1,self.bn1,self.conv2,self.bn2,self.conv3) for _ in range(3)]
+        self.sMoE    = sparseMoE(self.experts)
+
     def forward(self, x: Tensor) -> Tensor:
         identity = x
 
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
+        #out = self.conv1(x)
+        #out = self.bn1(out)
+        #out = self.relu(out)
 
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu(out)
+        #out = self.conv2(out)
+        #out = self.bn2(out)
+        #out = self.relu(out)
 
-        out = self.conv3(out)
-        out = self.bn3(out)
+        #out = self.conv3(out)
+        #out = self.bn3(out)
+        out = self.sMoE(x)
+        out = self.gn(out)
 
         if self.downsample is not None:
             identity = self.downsample(x)
