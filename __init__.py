@@ -9,6 +9,7 @@ from .mobilenet import *
 from .regnet import *
 from .resnet import *
 from .resnet_bngn import *
+from .resnet_bngn_dynamic import *
 from .shufflenetv2 import *
 from .squeezenet import *
 from .vgg import *

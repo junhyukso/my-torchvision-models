@@ -16,27 +16,27 @@ from .moe import sparseMoE, Expert
 
 
 __all__ = [
-    "ResNet_bngn",
-    #"ResNet18_Weights_bngn",
-    #"ResNet34_Weights_bngn",
-    #"ResNet50_Weights_bngn",
-    #"ResNet101_Weights_bngn",
-    #"ResNet152_Weights_bngn",
-    #"ResNeXt50_32X4D_Weights_bngn",
-    #"ResNeXt101_32X8D_Weights_bngn",
-    #"ResNeXt101_64X4D_Weights_bngn",
-    #"Wide_ResNet50_2_Weights_bngn",
-    #"Wide_ResNet101_2_Weights_bngn",
-    "resnet18_bngn",
-    "resnet34_bngn",
-    "resnet50_bngn",
-    "resnet101_bngn",
-    "resnet152_bngn",
-    "resnext50_32x4d_bngn",
-    "resnext101_32x8d_bngn",
-    "resnext101_64x4d_bngn",
-    "wide_resnet50_2_bngn",
-    "wide_resnet101_2_bngn",
+    "ResNet_bngn_dynamic",
+    #"ResNet18_Weights_bngn_dynamic",
+    #"ResNet34_Weights_bngn_dynamic",
+    #"ResNet50_Weights_bngn_dynamic",
+    #"ResNet101_Weights_bngn_dynamic",
+    #"ResNet152_Weights_bngn_dynamic",
+    #"ResNeXt50_32X4D_Weights_bngn_dynamic",
+    #"ResNeXt101_32X8D_Weights_bngn_dynamic",
+    #"ResNeXt101_64X4D_Weights_bngn_dynamic",
+    #"Wide_ResNet50_2_Weights_bngn_dynamic",
+    #"Wide_ResNet101_2_Weights_bngn_dynamic",
+    "resnet18_bngn_dynamic",
+    "resnet34_bngn_dynamic",
+    "resnet50_bngn_dynamic",
+    "resnet101_bngn_dynamic",
+    "resnet152_bngn_dynamic",
+    "resnext50_32x4d_bngn_dynamic",
+    "resnext101_32x8d_bngn_dynamic",
+    "resnext101_64x4d_bngn_dynamic",
+    "wide_resnet50_2_bngn_dynamic",
+    "wide_resnet101_2_bngn_dynamic",
 ]
 
 
@@ -204,7 +204,7 @@ class Bottleneck(nn.Module):
         return out
 
 
-class ResNet_bngn(nn.Module):
+class ResNet_bngn_dynamic(nn.Module):
     def __init__(
         self,
         block: Type[Union[BasicBlock, Bottleneck]],
@@ -332,11 +332,11 @@ def _resnet(
     weights: Optional[WeightsEnum],
     progress: bool,
     **kwargs: Any,
-) -> ResNet_bngn:
+) -> ResNet_bngn_dynamic:
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = ResNet_bngn(block, layers, **kwargs)
+    model = ResNet_bngn_dynamic(block, layers, **kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress))
@@ -687,7 +687,7 @@ class Wide_ResNet101_2_Weights(WeightsEnum):
 
 
 @handle_legacy_interface(weights=("pretrained", ResNet18_Weights.IMAGENET1K_V1))
-def resnet18_bngn(*, weights: Optional[ResNet18_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet_bngn:
+def resnet18_bngn_dynamic(*, weights: Optional[ResNet18_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet_bngn_dynamic:
     """ResNet-18 from `Deep Residual Learning for Image Recognition <https://arxiv.org/pdf/1512.03385.pdf>`__.
 
     Args:
@@ -712,7 +712,7 @@ def resnet18_bngn(*, weights: Optional[ResNet18_Weights] = None, progress: bool 
 
 
 @handle_legacy_interface(weights=("pretrained", ResNet34_Weights.IMAGENET1K_V1))
-def resnet34_bngn(*, weights: Optional[ResNet34_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet_bngn:
+def resnet34_bngn_dynamic(*, weights: Optional[ResNet34_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet_bngn_dynamic:
     """ResNet-34 from `Deep Residual Learning for Image Recognition <https://arxiv.org/pdf/1512.03385.pdf>`__.
 
     Args:
@@ -737,7 +737,7 @@ def resnet34_bngn(*, weights: Optional[ResNet34_Weights] = None, progress: bool 
 
 
 @handle_legacy_interface(weights=("pretrained", ResNet50_Weights.IMAGENET1K_V1))
-def resnet50_bngn(*, weights: Optional[ResNet50_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet_bngn:
+def resnet50_bngn_dynamic(*, weights: Optional[ResNet50_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet_bngn_dynamic:
     """ResNet-50 from `Deep Residual Learning for Image Recognition <https://arxiv.org/pdf/1512.03385.pdf>`__.
 
     .. note::
@@ -768,7 +768,7 @@ def resnet50_bngn(*, weights: Optional[ResNet50_Weights] = None, progress: bool 
 
 
 @handle_legacy_interface(weights=("pretrained", ResNet101_Weights.IMAGENET1K_V1))
-def resnet101_bngn(*, weights: Optional[ResNet101_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet_bngn:
+def resnet101_bngn_dynamic(*, weights: Optional[ResNet101_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet_bngn_dynamic:
     """ResNet-101 from `Deep Residual Learning for Image Recognition <https://arxiv.org/pdf/1512.03385.pdf>`__.
 
     .. note::
@@ -799,7 +799,7 @@ def resnet101_bngn(*, weights: Optional[ResNet101_Weights] = None, progress: boo
 
 
 @handle_legacy_interface(weights=("pretrained", ResNet152_Weights.IMAGENET1K_V1))
-def resnet152_bngn(*, weights: Optional[ResNet152_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet_bngn:
+def resnet152_bngn_dynamic(*, weights: Optional[ResNet152_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet_bngn_dynamic:
     """ResNet-152 from `Deep Residual Learning for Image Recognition <https://arxiv.org/pdf/1512.03385.pdf>`__.
 
     .. note::
@@ -830,9 +830,9 @@ def resnet152_bngn(*, weights: Optional[ResNet152_Weights] = None, progress: boo
 
 
 @handle_legacy_interface(weights=("pretrained", ResNeXt50_32X4D_Weights.IMAGENET1K_V1))
-def resnext50_32x4d_bngn(
+def resnext50_32x4d_bngn_dynamic(
     *, weights: Optional[ResNeXt50_32X4D_Weights] = None, progress: bool = True, **kwargs: Any
-) -> ResNet_bngn:
+) -> ResNet_bngn_dynamic:
     """ResNeXt-50 32x4d model from
     `Aggregated Residual Transformation for Deep Neural Networks <https://arxiv.org/abs/1611.05431>`_.
 
@@ -859,9 +859,9 @@ def resnext50_32x4d_bngn(
 
 
 @handle_legacy_interface(weights=("pretrained", ResNeXt101_32X8D_Weights.IMAGENET1K_V1))
-def resnext101_32x8d_bngn(
+def resnext101_32x8d_bngn_dynamic(
     *, weights: Optional[ResNeXt101_32X8D_Weights] = None, progress: bool = True, **kwargs: Any
-) -> ResNet_bngn:
+) -> ResNet_bngn_dynamic:
     """ResNeXt-101 32x8d model from
     `Aggregated Residual Transformation for Deep Neural Networks <https://arxiv.org/abs/1611.05431>`_.
 
@@ -887,9 +887,9 @@ def resnext101_32x8d_bngn(
     return _resnet(Bottleneck, [3, 4, 23, 3], weights, progress, **kwargs)
 
 
-def resnext101_64x4d_bngn(
+def resnext101_64x4d_bngn_dynamic(
     *, weights: Optional[ResNeXt101_64X4D_Weights] = None, progress: bool = True, **kwargs: Any
-) -> ResNet_bngn:
+) -> ResNet_bngn_dynamic:
     """ResNeXt-101 64x4d model from
     `Aggregated Residual Transformation for Deep Neural Networks <https://arxiv.org/abs/1611.05431>`_.
 
@@ -916,9 +916,9 @@ def resnext101_64x4d_bngn(
 
 
 @handle_legacy_interface(weights=("pretrained", Wide_ResNet50_2_Weights.IMAGENET1K_V1))
-def wide_resnet50_2_bngn(
+def wide_resnet50_2_bngn_dynamic(
     *, weights: Optional[Wide_ResNet50_2_Weights] = None, progress: bool = True, **kwargs: Any
-) -> ResNet_bngn:
+) -> ResNet_bngn_dynamic:
     """Wide ResNet-50-2 model from
     `Wide Residual Networks <https://arxiv.org/abs/1605.07146>`_.
 
@@ -949,9 +949,9 @@ def wide_resnet50_2_bngn(
 
 
 @handle_legacy_interface(weights=("pretrained", Wide_ResNet101_2_Weights.IMAGENET1K_V1))
-def wide_resnet101_2_bngn(
+def wide_resnet101_2_bngn_dynamic(
     *, weights: Optional[Wide_ResNet101_2_Weights] = None, progress: bool = True, **kwargs: Any
-) -> ResNet_bngn:
+) -> ResNet_bngn_dynamic:
     """Wide ResNet-101-2 model from
     `Wide Residual Networks <https://arxiv.org/abs/1605.07146>`_.
 
