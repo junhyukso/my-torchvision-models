@@ -8,6 +8,7 @@ class sparseMoE(nn.Module):
         #self.gate       = Gate(n_channel,len(self.experts), gumbel_tau=gumbel_tau)
 
         self.mode       = mode # [ 'single', 'moe',  'weight_sharing']
+        self._register_load_state_dict_pre_hook(lambda m,k : m._prepare_weight())
 
     def _share_weight(self):
         # Copying Direction : 0 -> 1,2,3, ..
@@ -41,8 +42,8 @@ class sparseMoE(nn.Module):
             #mask = self.gate(x)
 
         #Random Mask
-        #mask = F.one_hot(torch.randn(x.shape[0],len(self.experts)).argmax(dim=1),num_classes=len(self.experts)).float() # Noise-Free
-        #mask = mask.to(x.device)
+        mask = F.one_hot(torch.randn(x.shape[0],len(self.experts)).argmax(dim=1),num_classes=len(self.experts)).float() # Noise-Free
+        mask = mask.to(x.device)
 
         mask,soft = mask
         self.mask = mask #For Bit loss Computing
@@ -58,6 +59,11 @@ class sparseMoE(nn.Module):
 class Expert(nn.Module):
     def __init__(self):
         super().__init__()
+        self._register_load_state_dict_pre_hook(lambda m,k : m.load_parameter())
+
+    def _copy_weight(self,a,b):
+        # Load A from B
+        a.load_state_dict(b.state_dict())
 
     def load_parameter(self):
         raise "NOT IMPLEMENTED"

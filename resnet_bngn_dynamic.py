@@ -13,6 +13,8 @@ from ._utils import handle_legacy_interface, _ovewrite_named_param
 
 from .moe import sparseMoE, Expert
 
+
+
 __all__ = [
     "ResNet_bngn",
     #"ResNet18_Weights_bngn",
@@ -57,6 +59,34 @@ def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
 
+import copy
+
+class BasicBlockExpert(Expert):
+    def __init__(self, conv1, bn1, conv2):
+        super().__init__()
+        self.origins = [conv1, bn1, conv2]
+
+        self.conv1  =   copy.deepcopy(conv1)
+        self.bn1    =   copy.deepcopy(bn1)
+        self.conv2  =   copy.deepcopy(conv2)
+        self.relu   =   nn.ReLU(inplace=True)
+
+    def load_parameter(self):
+        self._copy_weight(self.conv1,self.origins[0])
+        self._copy_weight(self.bn1,self.origins[1])
+        self._copy_weight(self.conv2,self.origins[2])
+
+    def get_ws_selector(self):
+        return ['conv1.weight','conv2.weight']
+
+    def forward(self, x) :
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.conv2(x)
+        return x
+
+
 
 
 
@@ -90,19 +120,21 @@ class BasicBlock(nn.Module):
         self.stride = stride
         self.gn = nn.GroupNorm(4,planes)
 
+        self.experts = [BasicBlockExpert(self.conv1,self.bn1,self.conv2) for _ in range(3)]
+        self.sMoE    = sparseMoE(self.experts)
+
         ###For Dynamic
 
 
     def forward(self, x: Tensor) -> Tensor:
         identity = x
 
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
+        #out = self.conv1(x)
+        #out = self.bn1(out)
+        #out = self.relu(out)
+        #out = self.conv2(out)
 
-        out = self.conv2(out)
-
-        #out = self.bit_moe(x)
+        out = self.sMoE(x)
         out = self.gn(out)
 
         if self.downsample is not None:
