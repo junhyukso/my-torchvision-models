@@ -12,7 +12,7 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import handle_legacy_interface, _ovewrite_named_param
 
 from .moe import sparseMoE, Expert
-
+from .lsq import QuantOps as Q
 
 
 __all__ = [
@@ -75,9 +75,9 @@ def general_softmax(logits, dim, is_training, temp=1.0, mode='gumbel',hard=True)
 
     return ret, logits
 
-def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
+def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1,manual_lv=None) -> nn.Conv2d:
     """3x3 convolution with padding"""
-    return nn.Conv2d(
+    return Q.Conv2d(
         in_planes,
         out_planes,
         kernel_size=3,
@@ -86,18 +86,29 @@ def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, d
         groups=groups,
         bias=False,
         dilation=dilation,
+        manual_lv=manual_lv
     )
+    #return nn.Conv2d(
+    #    in_planes,
+    #    out_planes,
+    #    kernel_size=3,
+    #    stride=stride,
+    #    padding=dilation,
+    #    groups=groups,
+    #    bias=False,
+    #    dilation=dilation
+    #)
 
 
-def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
+def conv1x1(in_planes: int, out_planes: int, stride: int = 1, manual_lv=None) -> nn.Conv2d:
     """1x1 convolution"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+    return Q.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False,manual_lv=manual_lv)
 
 
 import copy
 
 class BasicBlockExpert(Expert):
-    def __init__(self, conv1, bn1, conv2):
+    def __init__(self, conv1, bn1, conv2, bit):
         super().__init__()
         self.origins = [conv1, bn1, conv2]
 
@@ -105,6 +116,14 @@ class BasicBlockExpert(Expert):
         self.bn1    =   copy.deepcopy(bn1)
         self.conv2  =   copy.deepcopy(conv2)
         self.relu   =   nn.ReLU(inplace=True)
+
+        self.qrelu1 = Q.ReLU()
+        self.qrelu2 = Q.ReLU()
+
+        for n,m in self.named_modules():
+            if hasattr(m,'manual_lv') :
+                m.manual_lv = 2**bit
+
 
     def load_parameter(self):
         self._copy_weight(self.conv1,self.origins[0])
@@ -115,14 +134,13 @@ class BasicBlockExpert(Expert):
         return ['conv1.weight','conv2.weight']
 
     def forward(self, x) :
+        x = self.qrelu1(x)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
+        x = self.qrelu2(x)
         x = self.conv2(x)
         return x
-
-
-
 
 
 class BasicBlock(nn.Module):
@@ -157,8 +175,12 @@ class BasicBlock(nn.Module):
         self.stride = stride
         self.gn = nn.GroupNorm(4,planes)
 
-        self.experts = [BasicBlockExpert(self.conv1,self.bn1,self.conv2) for _ in range(len(self.bit_list))]
+        self.experts = [BasicBlockExpert(self.conv1,self.bn1,self.conv2,bit) for bit in self.bit_list ]
         self.sMoE    = sparseMoE(self.experts)
+
+        
+        if self.downsample is not None:
+            self.downsample_qrelu = Q.ReLU()
 
 
     def forward(self, x: Tensor, mask=None) -> Tensor:
@@ -173,7 +195,7 @@ class BasicBlock(nn.Module):
         out = self.gn(out)
 
         if self.downsample is not None:
-            identity = self.downsample(x)
+            identity = self.downsample(self.downsample_qrelu(x))
 
         out += identity
         out = self.relu(out)
@@ -319,7 +341,9 @@ class ResNet_bngn_dynamic(nn.Module):
 
         self.groups = groups
         self.base_width = width_per_group
-        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = Q.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False,manual_lv=2**8)
+        #self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -328,7 +352,8 @@ class ResNet_bngn_dynamic(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1],bit_list=self.bit_list)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2],bit_list=self.bit_list)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.fc = Q.Linear(512 * block.expansion, num_classes, manual_lv=2**8)
+        #self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         self.num_blocks = layers[1] + layers[2] + layers[3]
         self.pooler = nn.Sequential(
@@ -410,7 +435,7 @@ class ResNet_bngn_dynamic(nn.Module):
 
         #### Mask Generation #################################################
         mask_logit = self.pooler(x.detach()).view(-1,len(self.bit_list))
-        #m_hard = m_hard.normal_()#random selection
+        #mask_logit = mask_logit.normal_()#random selection
         mask_logit = mask_logit.view(-1,self.num_blocks,len(self.bit_list))
         m_hard,m_logit   = general_softmax(
                 mask_logit, -1, 

@@ -96,19 +96,6 @@ class Q_ReLU_DC(nn.Module):
         self.s          = Parameter(torch.Tensor(1))
         self.manual_lv = manual_lv
 
-        mid_channel = channel
-
-        self.sgen = nn.Sequential(
-               nn.AdaptiveAvgPool2d(1),
-               nn.Flatten(),
-               nn.Linear(channel,mid_channel,bias=True),
-               nn.ReLU(inplace=True),
-               nn.Linear(mid_channel,mid_channel,bias=True),
-               nn.ReLU(inplace=True),
-               nn.Linear(mid_channel,1,bias=True),
-               nn.Sigmoid()
-                )
-
     def initialize(self, n_lv, tensor):
         if self.manual_lv != None :
             self.n_lv = self.manual_lv
@@ -351,6 +338,9 @@ class Q_Linear(nn.Linear):
 
 
 def initialize(model, loader, n_lv, act=False, weight=False):
+
+    print("WARNING : you have to call Q.initialize() AFTER .load_state_dict() !")
+
     def initialize_hook(module, input, output):
         if isinstance(module, (Q_ReLU, Q_ReLU_DC, Q_Sym, Q_HSwish)) and act:
             module.initialize(n_lv, input[0].data)

@@ -21,3 +21,5 @@ from . import quantization
 from . import segmentation
 from . import video
 from ._api import get_weight
+
+from .lsq import QuantOps
