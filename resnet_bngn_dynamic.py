@@ -117,13 +117,24 @@ class BasicBlockExpert(Expert):
         self.conv2  =   copy.deepcopy(conv2)
         self.relu   =   nn.ReLU(inplace=True)
 
-        self.qrelu1 = Q.ReLU()
-        self.qrelu2 = Q.ReLU()
+        self.qrelu1 = Q.ReLU_DC()
+        self.qrelu2 = Q.ReLU_DC()
 
         for n,m in self.named_modules():
             if hasattr(m,'manual_lv') :
                 m.manual_lv = 2**bit
-
+        
+        inplanes = self.conv1.weight.shape[1]
+        self.sgen = nn.Sequential(
+               nn.AdaptiveAvgPool2d(1),
+               nn.Flatten(),
+               nn.Linear(inplanes,inplanes,bias=True),
+               nn.ReLU(inplace=True),
+               nn.Linear(inplanes,inplanes,bias=True),
+               nn.ReLU(inplace=True),
+               nn.Linear(inplanes,2,bias=True),
+               nn.Sigmoid()
+                )
 
     def load_parameter(self):
         self._copy_weight(self.conv1,self.origins[0])
@@ -134,11 +145,13 @@ class BasicBlockExpert(Expert):
         return ['conv1.weight','conv2.weight']
 
     def forward(self, x) :
-        x = self.qrelu1(x)
+        ss = self.sgen(x)
+
+        x = self.qrelu1(x,ss[:,0])
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        x = self.qrelu2(x)
+        x = self.qrelu2(x,ss[:,1])
         x = self.conv2(x)
         return x
 
@@ -180,7 +193,17 @@ class BasicBlock(nn.Module):
 
         
         if self.downsample is not None:
-            self.downsample_qrelu = Q.ReLU()
+            self.sgen = nn.Sequential(
+                   nn.AdaptiveAvgPool2d(1),
+                   nn.Flatten(),
+                   nn.Linear(inplanes,inplanes,bias=True),
+                   nn.ReLU(inplace=True),
+                   nn.Linear(inplanes,inplanes,bias=True),
+                   nn.ReLU(inplace=True),
+                   nn.Linear(inplanes,1,bias=True),
+                   nn.Sigmoid()
+                    )
+            self.downsample_qrelu = Q.ReLU_DC()
 
 
     def forward(self, x: Tensor, mask=None) -> Tensor:
@@ -195,7 +218,8 @@ class BasicBlock(nn.Module):
         out = self.gn(out)
 
         if self.downsample is not None:
-            identity = self.downsample(self.downsample_qrelu(x))
+            ss = self.sgen(x)
+            identity = self.downsample(self.downsample_qrelu(x,ss))
 
         out += identity
         out = self.relu(out)
