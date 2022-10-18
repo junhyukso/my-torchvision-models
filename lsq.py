@@ -90,7 +90,7 @@ class Q_ReLU(nn.Module):
             return x 
 
 class Q_ReLU_DC(nn.Module):
-    def __init__(self,channel,manual_lv=None):
+    def __init__(self,manual_lv=None):
         super(Q_ReLU_DC, self).__init__()
         self.n_lv       = 0
         self.s          = Parameter(torch.Tensor(1))
