@@ -240,6 +240,10 @@ class BottleneckExpert(Expert):
         self.conv3  =   copy.deepcopy(conv3)
         self.relu   =   nn.ReLU(inplace=True)
 
+        self.qrelu1 = Q.ReLU()
+        self.qrelu2 = Q.ReLU()
+        self.qrelu3 = Q.ReLU()
+
     def load_parameter(self):
         self._copy_weight(self.conv1,self.origins[0])
         self._copy_weight(self.bn1,self.origins[1])
@@ -248,18 +252,20 @@ class BottleneckExpert(Expert):
         self._copy_weight(self.conv3,self.origins[4])
 
     def get_ws_selector(self):
-        #return ['conv1.weight','conv2.weight','conv3.weight']
-        return []
+        return ['conv1.weight','conv2.weight','conv3.weight']
 
     def forward(self, x) :
-        out = self.conv1(x)
+        out = self.qrelu1(x)
+        out = self.conv1(out)
         out = self.bn1(out)
         out = self.relu(out)
 
+        out = self.qrelu2(x)
         out = self.conv2(out)
         out = self.bn2(out)
         out = self.relu(out)
 
+        out = self.qrelu3(x)
         out = self.conv3(out)
         return out
 
