@@ -243,6 +243,10 @@ class BottleneckExpert(Expert):
         self.qrelu1 = Q.ReLU()
         self.qrelu2 = Q.ReLU()
         self.qrelu3 = Q.ReLU()
+        
+        for n,m in self.named_modules():
+            if hasattr(m,'manual_lv') :
+                m.manual_lv = 2**bit
 
     def load_parameter(self):
         self._copy_weight(self.conv1,self.origins[0])
