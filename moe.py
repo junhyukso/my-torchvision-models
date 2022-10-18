@@ -11,9 +11,11 @@ class sparseMoE(nn.Module):
 
         self.mode       = mode # [ 'single', 'moe',  'weight_sharing']
         self.register_load_state_dict_post_hook(lambda m,k : m._prepare_weight())
+        self.is_single = len(self.experts)==1
 
     def _share_weight(self):
         # Copying Direction : 0 -> 1,2,3, ..
+        if self.is_single: return
 
         ws_selector = self.experts[0].get_ws_selector()
 
@@ -38,19 +40,20 @@ class sparseMoE(nn.Module):
                 self.experts[i].load_state_dict(self.experts[0].state_dict())
 
     def forward(self, x,mask=None):
-        if self.mode == 'single' :
+        if self.is_single:
             return self.experts[0](x)
 
         #if self.mode != 'single' and mask == None : 
             #mask = self.gate(x)
 
         #Random Mask
-        mask = F.one_hot(torch.randn(x.shape[0],len(self.experts)).argmax(dim=1),num_classes=len(self.experts)).float() # Noise-Free
-        mask = mask.to(x.device)
+        #mask = F.one_hot(torch.randn(x.shape[0],len(self.experts)).argmax(dim=1),num_classes=len(self.experts)).float() # Noise-Free
+        #mask = mask.to(x.device)
 
-        #mask,soft = mask
-        #self.mask = mask #For Bit loss Computing
-        #self.soft = soft
+
+        mask,logit = mask
+        self.mask = mask #For Bit loss Computing
+        self.logit = logit
 
         outs = [ expert(x) for expert in self.experts ]
         out = torch.zeros_like(outs[0])

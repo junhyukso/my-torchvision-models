@@ -39,6 +39,41 @@ __all__ = [
     "wide_resnet101_2_bngn_dynamic",
 ]
 
+def general_softmax(logits, dim, is_training, temp=1.0, mode='gumbel',hard=True):
+    # mode : attention, gumbel
+    #import pdb; pdb.set_trace()
+
+    #logits = (logits - logits.mean(dim=0,keepdim=True))/logits.var(dim=0,keepdim=True).sqrt()
+    #logits = (logits - logits.mean(dim=0,keepdim=True))
+    #logits = (logits - logits.mean(dim=(0),keepdim=True)/1.2)
+    #logits = F.sigmoid(logits)*2 - 1
+
+    if  is_training and mode == 'gumbel' :
+        gumbels = (-torch.empty_like(logits, memory_format=torch.legacy_contiguous_format).exponential_().log()) #inplace filling
+        gumbels = gumbels*temp
+        logits += gumbels
+
+    if  is_training and mode == 'gauss' :
+        gauss = torch.empty_like(logits, memory_format=torch.legacy_contiguous_format).normal_() #inplace filling
+        gauss = gauss * 3
+        logits += gauss
+
+    m_soft = (logits / temp).softmax(dim)
+    
+    index = m_soft.max(dim, keepdim=True)[1]
+    m_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
+
+    if is_training : 
+        if hard:
+            # Straight through.
+            ret = m_hard - m_soft.detach() + m_soft
+        else:
+            # Reparametrization trick.
+            ret = m_soft
+    else :
+        ret = m_hard
+
+    return ret, logits
 
 def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
     """3x3 convolution with padding"""
@@ -103,6 +138,7 @@ class BasicBlock(nn.Module):
         base_width: int = 64,
         dilation: int = 1,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
+        bit_list = None
     ) -> None:
         super().__init__()
         if norm_layer is None:
@@ -112,6 +148,7 @@ class BasicBlock(nn.Module):
         if dilation > 1:
             raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
+        self.bit_list = bit_list
         self.conv1 = conv3x3(inplanes, planes, stride)
         self.bn1 = norm_layer(planes)
         self.relu = nn.ReLU(inplace=True)
@@ -120,11 +157,11 @@ class BasicBlock(nn.Module):
         self.stride = stride
         self.gn = nn.GroupNorm(4,planes)
 
-        self.experts = [BasicBlockExpert(self.conv1,self.bn1,self.conv2) for _ in range(3)]
+        self.experts = [BasicBlockExpert(self.conv1,self.bn1,self.conv2) for _ in range(len(self.bit_list))]
         self.sMoE    = sparseMoE(self.experts)
 
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, mask=None) -> Tensor:
         identity = x
 
         #out = self.conv1(x)
@@ -132,7 +169,7 @@ class BasicBlock(nn.Module):
         #out = self.relu(out)
         #out = self.conv2(out)
 
-        out = self.sMoE(x)
+        out = self.sMoE(x,mask)
         out = self.gn(out)
 
         if self.downsample is not None:
@@ -200,8 +237,10 @@ class Bottleneck(nn.Module):
         base_width: int = 64,
         dilation: int = 1,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
+        bit_list = None
     ) -> None:
         super().__init__()
+        self.bit_list = bit_list
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         width = int(planes * (base_width / 64.0)) * groups
@@ -217,10 +256,10 @@ class Bottleneck(nn.Module):
         self.downsample = downsample
         self.stride = stride
 
-        self.experts = [BottleneckExpert(self.conv1,self.bn1,self.conv2,self.bn2,self.conv3) for _ in range(3)]
+        self.experts = [BottleneckExpert(self.conv1,self.bn1,self.conv2,self.bn2,self.conv3) for _ in range(len(self.bit_list))]
         self.sMoE    = sparseMoE(self.experts)
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor,mask=None) -> Tensor:
         identity = x
 
         #out = self.conv1(x)
@@ -233,7 +272,7 @@ class Bottleneck(nn.Module):
 
         #out = self.conv3(out)
         #out = self.bn3(out)
-        out = self.sMoE(x)
+        out = self.sMoE(x,mask)
         out = self.gn(out)
 
         if self.downsample is not None:
@@ -256,6 +295,7 @@ class ResNet_bngn_dynamic(nn.Module):
         width_per_group: int = 64,
         replace_stride_with_dilation: Optional[List[bool]] = None,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
+        bit_list = None
     ) -> None:
         super().__init__()
         _log_api_usage_once(self)
@@ -274,19 +314,31 @@ class ResNet_bngn_dynamic(nn.Module):
                 "replace_stride_with_dilation should be None "
                 f"or a 3-element tuple, got {replace_stride_with_dilation}"
             )
+
+        self.bit_list = bit_list
+
         self.groups = groups
         self.base_width = width_per_group
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1])
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
+        self.layer1 = self._make_layer(block, 64, layers[0],bit_list=[8])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0],bit_list=self.bit_list)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1],bit_list=self.bit_list)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2],bit_list=self.bit_list)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
+        self.num_blocks = layers[1] + layers[2] + layers[3]
+        self.pooler = nn.Sequential(
+                    nn.AvgPool2d(7,7),#CIFAR100
+                    nn.Flatten(),
+                    nn.Linear(64*8*8,64),
+                    nn.ReLU(),
+                    nn.Dropout(0.2),
+                    nn.Linear(64,len(self.bit_list)*(self.num_blocks))
+                )
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
@@ -311,6 +363,7 @@ class ResNet_bngn_dynamic(nn.Module):
         blocks: int,
         stride: int = 1,
         dilate: bool = False,
+        bit_list = None
     ) -> nn.Sequential:
         norm_layer = self._norm_layer
         downsample = None
@@ -327,7 +380,7 @@ class ResNet_bngn_dynamic(nn.Module):
         layers = []
         layers.append(
             block(
-                self.inplanes, planes, stride, downsample, self.groups, self.base_width, previous_dilation, norm_layer
+                self.inplanes, planes, stride, downsample, self.groups, self.base_width, previous_dilation, norm_layer,bit_list =bit_list
             )
         )
         self.inplanes = planes * block.expansion
@@ -340,6 +393,7 @@ class ResNet_bngn_dynamic(nn.Module):
                     base_width=self.base_width,
                     dilation=self.dilation,
                     norm_layer=norm_layer,
+                    bit_list = bit_list
                 )
             )
 
@@ -353,10 +407,30 @@ class ResNet_bngn_dynamic(nn.Module):
         x = self.maxpool(x)
 
         x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
 
+        #### Mask Generation #################################################
+        mask_logit = self.pooler(x.detach()).view(-1,len(self.bit_list))
+        #m_hard = m_hard.normal_()#random selection
+        mask_logit = mask_logit.view(-1,self.num_blocks,len(self.bit_list))
+        m_hard,m_logit   = general_softmax(
+                mask_logit, -1, 
+                self.training, mode='gumbel',temp=1.0)#self.args.gumbel_tau )
+        m_hard          = m_hard.view(-1,self.num_blocks,len(self.bit_list))
+        m_logit          = m_logit.view(-1,self.num_blocks,len(self.bit_list))
+        #######################################################################
+        i = 0
+        for m in self.layer2 :
+            x = m(x,[m_hard[:,i,:],m_logit[:,i,:]])
+            #out = m(out)
+            i += 1
+        for m in self.layer3 :
+            x = m(x,[m_hard[:,i,:],m_logit[:,i,:]])
+            #out = m(out)
+            i += 1
+        for m in self.layer4 :
+            x = m(x,[m_hard[:,i,:],m_logit[:,i,:]])
+            #out = m(out)
+            i += 1
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
@@ -748,7 +822,6 @@ def resnet18_bngn_dynamic(*, weights: Optional[ResNet18_Weights] = None, progres
         :members:
     """
     weights = ResNet18_Weights.verify(weights)
-
     return _resnet(BasicBlock, [2, 2, 2, 2], weights, progress, **kwargs)
 
 
