@@ -84,7 +84,8 @@ class Q_ReLU(nn.Module):
         if self.n_lv == 0:
             return x
         else:
-            s = GradientScale.apply(self.s, self.n_lv, x.numel() // x.shape[0])
+            #s = GradientScale.apply(self.s, self.n_lv, x.numel() // x.shape[0])
+            s = self.s
             x = F.hardtanh(x / s, 0, self.n_lv - 1)
             x = RoundQuant.apply(x) * s
             return x 
