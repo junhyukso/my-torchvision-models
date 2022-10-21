@@ -58,6 +58,9 @@ def general_softmax(logits, dim, is_training, temp=1.0, mode='gumbel',hard=True)
         gauss = gauss * 3
         logits += gauss
 
+    #logits = torch.nn.functional.sigmoid(logits)
+
+
     m_soft = (logits / temp).softmax(dim)
     
     index = m_soft.max(dim, keepdim=True)[1]
@@ -70,6 +73,8 @@ def general_softmax(logits, dim, is_training, temp=1.0, mode='gumbel',hard=True)
         else:
             # Reparametrization trick.
             ret = m_soft
+
+        logits = logits.softmax(dim)
     else :
         ret = m_hard
 
@@ -448,10 +453,14 @@ class ResNet_bngn_dynamic(nn.Module):
         #mask_logit = mask_logit.normal_()#random selection
         mask_logit = mask_logit.view(-1,self.num_blocks,len(self.bit_list))
         m_hard,m_logit   = general_softmax(
-                mask_logit, -1, 
-                self.training, mode='gumbel',temp=1.0)#self.args.gumbel_tau )
-        m_hard          = m_hard.view(-1,self.num_blocks,len(self.bit_list))
-        m_logit          = m_logit.view(-1,self.num_blocks,len(self.bit_list))
+                mask_logit, 
+                -1, 
+                #True,
+                self.training, 
+                mode='gumbel',
+                temp=1.0)#self.args.gumbel_tau )
+        m_hard              = m_hard.view(-1,self.num_blocks,len(self.bit_list))
+        m_logit             = m_logit.view(-1,self.num_blocks,len(self.bit_list))
         #######################################################################
         i = 0
         for m in self.layer2 :
