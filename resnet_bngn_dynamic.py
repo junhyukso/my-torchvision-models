@@ -180,8 +180,11 @@ class BasicBlock(nn.Module):
         self.stride = stride
         self.gn = nn.GroupNorm(4,planes)
 
-        self.experts = [BasicBlockExpert(self.conv1,self.bn1,self.conv2,bit) for bit in self.bit_list ]
-        self.sMoE    = sparseMoE(self.experts)
+        if len(self.bit_list) > 1 :
+            self.experts = [BasicBlockExpert(self.conv1,self.bn1,self.conv2,bit) for bit in self.bit_list ]
+            self.sMoE    = sparseMoE(self.experts)
+        else :
+            self.sMoE = BasicBlockExpert(self.conv1,self.bn1,self.conv2, self.bit_list[0]) 
 
         
         if self.downsample is not None:
@@ -196,7 +199,10 @@ class BasicBlock(nn.Module):
         #out = self.relu(out)
         #out = self.conv2(out)
 
-        out = self.sMoE(x,mask)
+        if len(self.bit_list) > 1 :
+            out = self.sMoE(x,mask)
+        else :
+            out = self.sMoE(x)
         out = self.gn(out)
 
         if self.downsample is not None:
