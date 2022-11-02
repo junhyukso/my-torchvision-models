@@ -40,7 +40,7 @@ class sparseMoE(nn.Module):
                 self.experts[i].load_state_dict(self.experts[0].state_dict())
 
     def forward(self, x,mask=None):
-        if self.is_single:
+        if self.is_single or len(self.experts)==1:
             return self.experts[0](x)
 
         #if self.mode != 'single' and mask == None : 

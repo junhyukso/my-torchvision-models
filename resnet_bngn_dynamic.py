@@ -50,7 +50,7 @@ def general_softmax(logits, dim, is_training, temp=1.0, mode='gumbel',hard=True)
 
     if  is_training and mode == 'gumbel' :
         gumbels = (-torch.empty_like(logits, memory_format=torch.legacy_contiguous_format).exponential_().log()) #inplace filling
-        gumbels = gumbels*temp
+        gumbels = gumbels
         logits += gumbels
 
     if  is_training and mode == 'gauss' :
@@ -180,11 +180,8 @@ class BasicBlock(nn.Module):
         self.stride = stride
         self.gn = nn.GroupNorm(4,planes)
 
-        if len(self.bit_list) > 1 :
-            self.experts = [BasicBlockExpert(self.conv1,self.bn1,self.conv2,bit) for bit in self.bit_list ]
-            self.sMoE    = sparseMoE(self.experts)
-        else :
-            self.sMoE = BasicBlockExpert(self.conv1,self.bn1,self.conv2, self.bit_list[0]) 
+        self.experts = [BasicBlockExpert(self.conv1,self.bn1,self.conv2,bit) for bit in self.bit_list ]
+        self.sMoE    = sparseMoE(self.experts)
 
         
         if self.downsample is not None:
@@ -199,10 +196,7 @@ class BasicBlock(nn.Module):
         #out = self.relu(out)
         #out = self.conv2(out)
 
-        if len(self.bit_list) > 1 :
-            out = self.sMoE(x,mask)
-        else :
-            out = self.sMoE(x)
+        out = self.sMoE(x,mask)
         out = self.gn(out)
 
         if self.downsample is not None:
@@ -402,6 +396,9 @@ class ResNet_bngn_dynamic(nn.Module):
                 elif isinstance(m, BasicBlock) and m.bn2.weight is not None:
                     nn.init.constant_(m.bn2.weight, 0)  # type: ignore[arg-type]
 
+        self.temperature = 10.0
+        self.step = 0
+
     def _make_layer(
         self,
         block: Type[Union[BasicBlock, Bottleneck]],
@@ -464,7 +461,9 @@ class ResNet_bngn_dynamic(nn.Module):
                 #True,
                 self.training, 
                 mode='gumbel',
-                temp=1.0)#self.args.gumbel_tau )
+                temp=self.temperature,
+                hard=False
+                )#self.args.gumbel_tau )
         m_hard              = m_hard.view(-1,self.num_blocks,len(self.bit_list))
         m_logit             = m_logit.view(-1,self.num_blocks,len(self.bit_list))
         #######################################################################
